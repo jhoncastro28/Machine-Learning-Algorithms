@@ -11,14 +11,13 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from ..utils.constants import MODEL_CONFIG, FILES
+from ..utils.helpers import setup_matplotlib
 import warnings
 warnings.filterwarnings('ignore')
 
-# Configuración para gráficos en español
-plt.rcParams['font.size'] = 10
-plt.rcParams['figure.figsize'] = (12, 8)
-sns.set_style("whitegrid")
-sns.set_palette("husl")
+# Configurar matplotlib
+setup_matplotlib()
 
 class DataHandler:
     """
@@ -183,7 +182,7 @@ class DataHandler:
         plt.tight_layout()
         plt.show()
     
-    def prepare_data(self, test_size=0.2, random_state=42):
+    def prepare_data(self, test_size=None, random_state=None):
         """
         Prepara los datos para el entrenamiento
         
@@ -194,6 +193,12 @@ class DataHandler:
         if self.data is None:
             print("❌ Primero debe cargar los datos")
             return False
+        
+        # Usar valores por defecto de configuración si no se proporcionan
+        if test_size is None:
+            test_size = MODEL_CONFIG['test_size']
+        if random_state is None:
+            random_state = MODEL_CONFIG['random_state']
         
         print("\n" + "="*60)
         print("🔧 PREPARACIÓN DE DATOS")

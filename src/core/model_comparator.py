@@ -9,8 +9,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from ..utils.constants import FILES
+from ..utils.helpers import setup_matplotlib
 import warnings
 warnings.filterwarnings('ignore')
+
+# Configurar matplotlib
+setup_matplotlib()
 
 class ModelComparator:
     """
@@ -345,7 +350,7 @@ class ModelComparator:
         
         return best_model, best_value
     
-    def save_results(self, filename='model_comparison_results.csv'):
+    def save_results(self, filename=None):
         """
         Guarda los resultados en un archivo CSV
         
@@ -355,6 +360,9 @@ class ModelComparator:
         if self.comparison_df is None:
             print("❌ No hay resultados para guardar")
             return
+        
+        if filename is None:
+            filename = FILES['results_csv']
         
         self.comparison_df.to_csv(filename, index=False)
         print(f"✅ Resultados guardados en {filename}")

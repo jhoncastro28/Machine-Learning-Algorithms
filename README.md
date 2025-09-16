@@ -43,6 +43,17 @@ pip install -r requirements.txt
 ```
 
 ### Ejecución
+
+#### Interfaz Gráfica (Recomendado)
+```bash
+python main.py
+```
+o directamente:
+```bash
+python gui_app.py
+```
+
+#### Interfaz de Consola
 ```bash
 python main.py
 ```
@@ -50,13 +61,28 @@ python main.py
 ## 📁 Estructura del Proyecto
 
 ```
-├── main.py                 # Aplicación principal interactiva
-├── data_handler.py         # Manejo y preprocesamiento de datos
-├── ml_models.py           # Implementación de algoritmos ML
-├── model_comparator.py    # Comparación y evaluación de modelos
+├── src/                   # Código fuente principal
+│   ├── core/             # Funcionalidades principales
+│   │   ├── data_handler.py      # Manejo y preprocesamiento de datos
+│   │   └── model_comparator.py  # Comparación y evaluación de modelos
+│   ├── models/           # Algoritmos de Machine Learning
+│   │   ├── base_model.py        # Clase base para modelos
+│   │   ├── logistic_regression.py
+│   │   ├── svm_model.py
+│   │   ├── decision_tree.py
+│   │   ├── random_forest.py
+│   │   └── neural_network.py
+│   ├── gui/              # Interfaz gráfica
+│   │   └── main_window.py       # Ventana principal de la GUI
+│   └── utils/            # Utilidades y helpers
+│       ├── constants.py         # Constantes del sistema
+│       └── helpers.py           # Funciones auxiliares
+├── main.py               # Lanzador principal
+├── run_gui.py           # Lanzador alternativo
+├── setup.py             # Configuración del proyecto
 ├── coffee_shop_revenue.csv # Dataset de cafeterías
-├── requirements.txt       # Dependencias del proyecto
-└── README.md             # Documentación
+├── requirements.txt     # Dependencias del proyecto
+└── README.md           # Documentación
 ```
 
 ## 🎮 Funcionalidades
@@ -70,6 +96,14 @@ python main.py
 6. **Generar reporte** - Reporte completo de resultados
 7. **Guardar resultados** - Exportar resultados a CSV
 8. **Análisis completo** - Ejecución automática de todo el proceso
+
+### Características de la Interfaz Gráfica
+- 🎨 **Diseño moderno y atractivo** con colores profesionales
+- 📱 **Interfaz intuitiva** con botones grandes y claros
+- 📊 **Gráficos integrados** directamente en la aplicación
+- 🔄 **Procesamiento en segundo plano** para operaciones largas
+- 📋 **Ventanas organizadas** con pestañas para diferentes funciones
+- 💾 **Guardado automático** de resultados y reportes
 
 ### Visualizaciones Incluidas
 - 📊 Análisis exploratorio de datos
