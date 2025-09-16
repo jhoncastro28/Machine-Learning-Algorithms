@@ -2,14 +2,16 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, KFold
+from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.svm import SVC, SVR
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.neural_network import MLPClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve, mean_squared_error, mean_absolute_error, r2_score, balanced_accuracy_score, f1_score, average_precision_score
 import warnings
 import kagglehub
 
@@ -86,6 +88,197 @@ class CoffeeShopMLAnalysis:
         self.data = pd.DataFrame(data)
         print("Datos sintéticos creados exitosamente!")
     
+    # =====================
+    # NUEVO: Preprocesamiento y evaluaciones sin fuga
+    # =====================
+    def _build_feature_preprocessor(self, X: pd.DataFrame) -> ColumnTransformer:
+        """Crea un ColumnTransformer (one-hot + estandarización) para evitar fuga.
+
+        - OneHotEncoder para columnas categóricas.
+        - StandardScaler para columnas numéricas.
+        - Ajuste ocurre dentro del Pipeline en cada fold.
+        """
+        categorical_columns = X.select_dtypes(include=["object", "category"]).columns.tolist()
+        numeric_columns = X.select_dtypes(include=[np.number]).columns.tolist()
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("categorical", OneHotEncoder(handle_unknown="ignore"), categorical_columns),
+                ("numeric", StandardScaler(), numeric_columns),
+            ],
+            remainder="drop",
+        )
+        return preprocessor
+
+    def describe_objective_and_metrics(self):
+        """Objetivos y métricas:
+
+        - Regresión: predecir `daily_revenue`. Métricas: RMSE, MAE, R2.
+        - Clasificación: derivar `revenue_category` por cuantiles (3-4). Métricas:
+          balanced accuracy, macro F1, ROC-AUC OvR, PR-AUC macro.
+
+        Validación sin fuga:
+        - Cortes de cuantiles calculados SOLO con el conjunto de entrenamiento (por fold).
+        - One-hot/estandarización dentro de un Pipeline evaluado por fold en CV.
+        """
+        print("\nObjetivo y métricas definidos:")
+        print("- Regresión: RMSE, MAE, R2 sobre `daily_revenue`.")
+        print("- Clasificación por cuantiles: balanced accuracy, macro F1, ROC-AUC OvR, PR-AUC.")
+
+    def evaluate_regression_with_pipelines(self, cv_splits: int = 5) -> pd.DataFrame:
+        """Evalúa regresión con Pipelines (sin fuga) y CV.
+
+        Retorna DataFrame con medias y desviaciones (RMSE, MAE, R2).
+        """
+        if 'daily_revenue' not in self.data.columns:
+            raise ValueError("No se encontró la columna 'daily_revenue' para regresión.")
+
+        feature_cols = [c for c in self.data.columns if c != 'daily_revenue']
+        X = self.data[feature_cols].copy()
+        y = self.data['daily_revenue'].astype(float).values
+
+        preprocessor = self._build_feature_preprocessor(X)
+
+        models = {
+            'LinearRegression': LinearRegression(),
+            'RandomForestRegressor': RandomForestRegressor(random_state=42, n_estimators=300),
+            'SVR(rbf)': SVR(kernel='rbf', C=1.0, gamma='scale'),
+        }
+
+        kf = KFold(n_splits=cv_splits, shuffle=True, random_state=42)
+        rows = []
+
+        for name, model in models.items():
+            pipeline = Pipeline([
+                ('preprocess', preprocessor),
+                ('model', model),
+            ])
+
+            rmse_list, mae_list, r2_list = [], [], []
+            for train_idx, val_idx in kf.split(X):
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train, y_val = y[train_idx], y[val_idx]
+
+                pipeline.fit(X_train, y_train)
+                y_pred = pipeline.predict(X_val)
+                rmse_list.append(np.sqrt(mean_squared_error(y_val, y_pred)))
+                mae_list.append(mean_absolute_error(y_val, y_pred))
+                r2_list.append(r2_score(y_val, y_pred))
+
+            rows.append({
+                'Modelo': name,
+                'RMSE_μ': float(np.mean(rmse_list)),
+                'RMSE_σ': float(np.std(rmse_list)),
+                'MAE_μ': float(np.mean(mae_list)),
+                'MAE_σ': float(np.std(mae_list)),
+                'R2_μ': float(np.mean(r2_list)),
+                'R2_σ': float(np.std(r2_list)),
+            })
+
+        results_df = pd.DataFrame(rows)
+        print("\nResultados Regresión (CV):")
+        print(results_df.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+        return results_df
+
+    def evaluate_classification_by_quantiles(self, n_bins: int = 3, cv_splits: int = 5) -> pd.DataFrame:
+        """Evalúa clasificación derivando categorías por cuantiles de `daily_revenue`.
+
+        Reglas anti-fuga: cortes con y_train por fold y preprocesamiento en Pipeline.
+        """
+        if 'daily_revenue' not in self.data.columns:
+            raise ValueError("No se encontró 'daily_revenue' para cuantiles.")
+
+        feature_cols = [c for c in self.data.columns if c != 'daily_revenue']
+        X = self.data[feature_cols].copy()
+        y_cont = self.data['daily_revenue'].astype(float).values
+
+        preprocessor = self._build_feature_preprocessor(X)
+
+        models = {
+            'LogisticRegression': LogisticRegression(max_iter=1000, random_state=42),
+            'RandomForestClassifier': RandomForestClassifier(n_estimators=300, random_state=42),
+            'SVC(prob)': SVC(probability=True, kernel='rbf', gamma='scale', C=1.0, random_state=42),
+        }
+
+        kf = KFold(n_splits=cv_splits, shuffle=True, random_state=42)
+        rows = []
+
+        for name, model in models.items():
+            pipeline = Pipeline([
+                ('preprocess', preprocessor),
+                ('model', model),
+            ])
+
+            bal_acc_list, f1_macro_list, roc_auc_list, pr_auc_list = [], [], [], []
+
+            for train_idx, val_idx in kf.split(X):
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+                y_train_cont, y_val_cont = y_cont[train_idx], y_cont[val_idx]
+
+                # Cortes por cuantiles SOLO con train
+                q = np.linspace(0, 1, n_bins + 1)
+                cut_points = np.quantile(y_train_cont, q)
+                cut_points = np.unique(cut_points)
+                if len(cut_points) < 2:
+                    continue
+
+                def bin_with_cutpoints(values: np.ndarray) -> np.ndarray:
+                    labels = list(range(len(cut_points) - 1))
+                    return pd.cut(values, bins=cut_points, labels=labels, include_lowest=True).astype(int).values
+
+                y_train_cls = bin_with_cutpoints(y_train_cont)
+                y_val_cls = bin_with_cutpoints(y_val_cont)
+
+                pipeline.fit(X_train, y_train_cls)
+                y_pred = pipeline.predict(X_val)
+
+                # Probabilidades para AUC/PR-AUC
+                if hasattr(pipeline.named_steps['model'], 'predict_proba'):
+                    y_proba = pipeline.predict_proba(X_val)
+                else:
+                    if hasattr(pipeline.named_steps['model'], 'decision_function'):
+                        scores = pipeline.decision_function(X_val)
+                        exp_scores = np.exp(scores - np.max(scores, axis=1, keepdims=True))
+                        y_proba = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+                    else:
+                        preds = y_pred
+                        num_classes = len(np.unique(y_train_cls))
+                        y_proba = np.eye(num_classes)[preds]
+
+                bal_acc_list.append(balanced_accuracy_score(y_val_cls, y_pred))
+                f1_macro_list.append(f1_score(y_val_cls, y_pred, average='macro'))
+                try:
+                    roc_auc_list.append(roc_auc_score(y_val_cls, y_proba, multi_class='ovr'))
+                except Exception:
+                    pass
+                try:
+                    pr_auc_list.append(average_precision_score(pd.get_dummies(y_val_cls).values, y_proba, average='macro'))
+                except Exception:
+                    pass
+
+            rows.append({
+                'Modelo': name,
+                'BalancedAcc_μ': float(np.mean(bal_acc_list)) if bal_acc_list else np.nan,
+                'BalancedAcc_σ': float(np.std(bal_acc_list)) if bal_acc_list else np.nan,
+                'F1_macro_μ': float(np.mean(f1_macro_list)) if f1_macro_list else np.nan,
+                'F1_macro_σ': float(np.std(f1_macro_list)) if f1_macro_list else np.nan,
+                'ROC-AUC_OvR_μ': float(np.mean(roc_auc_list)) if roc_auc_list else np.nan,
+                'ROC-AUC_OvR_σ': float(np.std(roc_auc_list)) if roc_auc_list else np.nan,
+                'PR-AUC_macro_μ': float(np.mean(pr_auc_list)) if pr_auc_list else np.nan,
+                'PR-AUC_macro_σ': float(np.std(pr_auc_list)) if pr_auc_list else np.nan,
+            })
+
+        results_df = pd.DataFrame(rows)
+        print("\nResultados Clasificación por cuantiles (CV):")
+        print(results_df.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+        return results_df
+
+    def run_objective_evaluations(self):
+        """Ejecuta ambas tareas (regresión y clasificación por cuantiles) con CV sin fuga."""
+        self.describe_objective_and_metrics()
+        reg = self.evaluate_regression_with_pipelines(cv_splits=5)
+        cls = self.evaluate_classification_by_quantiles(n_bins=3, cv_splits=5)
+        return reg, cls
     def exploratory_data_analysis(self):
         """Realiza análisis exploratorio de datos"""
         print("\n" + "="*50)
