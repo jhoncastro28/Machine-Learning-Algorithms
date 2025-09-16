@@ -13,7 +13,15 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score, roc_curve, mean_squared_error, mean_absolute_error, r2_score, balanced_accuracy_score, f1_score, average_precision_score
 import warnings
+import os
+import sys
+import json
+import shutil
+import subprocess
+from pathlib import Path
 import kagglehub
+import argparse
+from typing import Optional, Tuple
 
 warnings.filterwarnings('ignore')
 plt.style.use('default')
@@ -31,7 +39,190 @@ class CoffeeShopMLAnalysis:
         self.scaler = StandardScaler()
         self.models = {}
         self.results = {}
+        self.resolved_data_path = None
+        self.resolved_source = None
         
+    def _validate_kaggle_credentials(self) -> Tuple[bool, str]:
+        """Valida credenciales y binario de Kaggle API en Windows/Linux/Mac.
+
+        Retorna (ok, mensaje_error_si_falla).
+        """
+        kaggle_json_path = os.path.expanduser("~/.kaggle/kaggle.json")
+        if not os.path.isfile(kaggle_json_path):
+            return False, (
+                "No se encontró ~/.kaggle/kaggle.json. Descarga tu token desde Kaggle (Account > API) y colócalo en esa ruta."
+            )
+        try:
+            with open(kaggle_json_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            if not cfg.get("username") or not cfg.get("key"):
+                return False, "kaggle.json inválido: faltan 'username' o 'key'."
+        except Exception as e:
+            return False, f"No se pudo leer kaggle.json: {e}"
+
+        kaggle_bin = shutil.which("kaggle")
+        if kaggle_bin is None:
+            return False, (
+                "CLI de Kaggle no encontrada. Instala con 'pip install kaggle' y añade al PATH."
+            )
+        return True, ""
+
+    def _download_from_kaggle(self, dataset: str, dest_dir: str) -> str:
+        """Descarga dataset desde Kaggle usando CLI oficial. Retorna ruta esperada del CSV si se puede inferir.
+
+        Lanza excepción con mensaje útil si falla.
+        """
+        ok, err = self._validate_kaggle_credentials()
+        if not ok:
+            raise RuntimeError(err)
+
+        Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        cmd = [
+            "kaggle", "datasets", "download", "-d", dataset, "-p", dest_dir, "--unzip"
+        ]
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                f"Fallo descarga Kaggle: {e.stderr.decode(errors='ignore') or e.stdout.decode(errors='ignore')}"
+            )
+
+        # Heurística: si hay un único CSV en dest_dir tras unzip, lo usamos.
+        csv_files = list(Path(dest_dir).glob("*.csv"))
+        if len(csv_files) == 1:
+            return str(csv_files[0])
+        return ""
+
+    def resolve_and_load_data(self,
+                              path: Optional[str] = None,
+                              source: str = "kaggle",
+                              kaggle_dataset: str = "himelsarder/coffee-shop-daily-revenue-prediction-dataset",
+                              filename_hint: str = "coffee_shop_revenue.csv",
+                              sep: str = ",",
+                              decimal: str = ".",
+                              id_column: Optional[str] = None,
+                              demo: bool = False) -> None:
+        """Resuelve y carga datos con fallback claro:
+        1) CSV explícito (--path)
+        2) Carpeta local data/ (filename_hint)
+        3) Kaggle (dataset por defecto u opcional)
+        4) Error útil (salvo --demo)
+        """
+        # 1) CSV explícito
+        if path:
+            abs_path = os.path.abspath(path)
+            if not os.path.isfile(abs_path):
+                raise FileNotFoundError(f"No existe el archivo especificado: {abs_path}")
+            self.data = pd.read_csv(abs_path, sep=sep, decimal=decimal)
+            if id_column and id_column in self.data.columns:
+                self.data = self.data.drop(columns=[id_column])
+            self.resolved_data_path = abs_path
+            self.resolved_source = "local:file"
+            print(f"Usando archivo proporcionado: {self.resolved_data_path}")
+            return
+
+        # 2) Carpeta data/
+        local_dir = os.path.abspath("data")
+        local_candidate = os.path.join(local_dir, filename_hint)
+        if os.path.isfile(local_candidate):
+            self.data = pd.read_csv(local_candidate, sep=sep, decimal=decimal)
+            if id_column and id_column in self.data.columns:
+                self.data = self.data.drop(columns=[id_column])
+            self.resolved_data_path = local_candidate
+            self.resolved_source = "local:data_dir"
+            print(f"Usando archivo local en data/: {self.resolved_data_path}")
+            return
+
+        # 3) Kaggle (si source permite)
+        if source.lower() == "kaggle":
+            try:
+                print("Descargando dataset desde Kaggle (CLI oficial)...")
+                inferred_csv = self._download_from_kaggle(kaggle_dataset, local_dir)
+                # Preferir filename_hint si existe; si no, usar inferido
+                final_csv = (
+                    os.path.join(local_dir, filename_hint)
+                    if os.path.isfile(os.path.join(local_dir, filename_hint))
+                    else inferred_csv
+                )
+                if not final_csv or not os.path.isfile(final_csv):
+                    raise FileNotFoundError(
+                        "Descarga realizada, pero no se encontró el CSV esperado. Revisa el contenido de data/."
+                    )
+                self.data = pd.read_csv(final_csv, sep=sep, decimal=decimal)
+                if id_column and id_column in self.data.columns:
+                    self.data = self.data.drop(columns=[id_column])
+                self.resolved_data_path = os.path.abspath(final_csv)
+                self.resolved_source = "kaggle"
+                print(f"Usando archivo descargado de Kaggle: {self.resolved_data_path}")
+                return
+            except Exception as e:
+                print(f"Error Kaggle: {e}")
+                print("Intentando fallback opcional con kagglehub...")
+                try:
+                    path_dir = kagglehub.dataset_download(kaggle_dataset)
+                    candidate = os.path.join(path_dir, filename_hint)
+                    if not os.path.isfile(candidate):
+                        # Si no coincide el nombre, intentar primer CSV
+                        csvs = list(Path(path_dir).glob("*.csv"))
+                        if not csvs:
+                            raise FileNotFoundError("kagglehub no entregó CSVs.")
+                        candidate = str(csvs[0])
+                    self.data = pd.read_csv(candidate, sep=sep, decimal=decimal)
+                    if id_column and id_column in self.data.columns:
+                        self.data = self.data.drop(columns=[id_column])
+                    self.resolved_data_path = os.path.abspath(candidate)
+                    self.resolved_source = "kagglehub"
+                    print(f"Usando archivo desde kagglehub: {self.resolved_data_path}")
+                    return
+                except Exception as e2:
+                    print(f"Error kagglehub: {e2}")
+
+        # 4) Error claro (o demo)
+        if demo:
+            print("No se encontró dataset. Modo --demo activo: generando datos sintéticos...")
+            self.create_synthetic_data()
+            self.resolved_data_path = "<synthetic>"
+            self.resolved_source = "demo"
+            return
+        raise RuntimeError(
+            "No se pudo resolver un archivo de datos. Proporcione --path válido, coloque el CSV en data/, o habilite Kaggle."
+        )
+
+    def run_via_target(self, target: str = "classification"):
+        """Ejecuta flujo según target: regression|classification|both."""
+        self.exploratory_data_analysis()
+        if target == "regression":
+            self.evaluate_regression_with_pipelines(cv_splits=5)
+            return
+        if target == "classification":
+            # Mantener el flujo clásico de clasificación existente
+            self.prepare_data()
+            self.initialize_models()
+            self.train_and_evaluate_models()
+            self.create_comparison_visualizations()
+            self.create_results_table()
+            self.generate_detailed_report()
+            best_model = max(self.results.keys(), key=lambda k: self.results[k]['accuracy'])
+            if best_model in ['Random Forest', 'SVM']:
+                self.hyperparameter_tuning(best_model)
+            return
+        # both
+        self.run_objective_evaluations()
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Coffee Shop ML - Flexible data input")
+    parser.add_argument("--path", type=str, default=None, help="Ruta a CSV local")
+    parser.add_argument("--source", type=str, default="kaggle", choices=["kaggle", "local"], help="Fuente de datos")
+    parser.add_argument("--target", type=str, default="classification", choices=["classification", "regression", "both"], help="Tarea objetivo")
+    parser.add_argument("--sep", type=str, default=",", help="Separador de columnas del CSV")
+    parser.add_argument("--decimal", type=str, default=".", help="Separador decimal del CSV")
+    parser.add_argument("--id-column", dest="id_column", type=str, default=None, help="Nombre de columna ID a descartar")
+    parser.add_argument("--kaggle-dataset", dest="kaggle_dataset", type=str, default="himelsarder/coffee-shop-daily-revenue-prediction-dataset", help="Slug de dataset Kaggle datasets")
+    parser.add_argument("--filename-hint", dest="filename_hint", type=str, default="coffee_shop_revenue.csv", help="Nombre de archivo esperado dentro del dataset")
+    parser.add_argument("--demo", action="store_true", help="Permite generar datos sintéticos si no hay fuentes disponibles")
+    return parser
+
     def download_and_load_data(self):
         """Descarga y carga el dataset desde Kaggle"""
         try:
@@ -708,11 +899,34 @@ class CoffeeShopMLAnalysis:
         
         return results_table
 
-# Ejecutar análisis completo
+# Ejecutar vía CLI
 if __name__ == "__main__":
+    parser = build_arg_parser()
+    args = parser.parse_args()
+
     analyzer = CoffeeShopMLAnalysis()
-    results_table = analyzer.run_complete_analysis()
-    
-    # Guardar resultados en CSV para el informe
-    results_table.to_csv('resultados_algoritmos_ml.csv', index=False)
-    print("\n📊 Tabla de resultados guardada como 'resultados_algoritmos_ml.csv'")
+    # Resolución de datos con fallback
+    analyzer.resolve_and_load_data(
+        path=args.path,
+        source=args.source,
+        kaggle_dataset=args.kaggle_dataset,
+        filename_hint=args.filename_hint,
+        sep=args.sep,
+        decimal=args.decimal,
+        id_column=args.id_column,
+        demo=args.demo,
+    )
+    print(f"Fuente de datos final: {analyzer.resolved_source}")
+    print(f"Ruta utilizada: {analyzer.resolved_data_path}")
+
+    # Ejecutar según target
+    analyzer.run_via_target(target=args.target)
+
+    # Guardado de resultados si existen
+    if analyzer.results:
+        try:
+            results_table = analyzer.create_results_table()
+            results_table.to_csv('resultados_algoritmos_ml.csv', index=False)
+            print("\n📊 Tabla de resultados guardada como 'resultados_algoritmos_ml.csv'")
+        except Exception:
+            pass
