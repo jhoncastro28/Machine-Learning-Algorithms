@@ -98,7 +98,7 @@ El análisis proporciona:
 
 ## 🎓 Información Académica
 
-**Universidad Pedagógica y Tecnológica de Colombia**
+**Universidad Pedagógica y Tecnológica de Colombia**.
 **Facultad**: Ingeniería - Escuela de Ingeniería de Sistemas y Computación  
 **Materia**: Inteligencia Computacional  
 
