@@ -8,6 +8,18 @@ from .svm_model import SVMModel
 from .decision_tree import DecisionTreeModel
 from .random_forest import RandomForestModel
 from .neural_network import NeuralNetworkModel
+from .regression_functions import (
+    train_linear_regression,
+    train_svm_regressor,
+    train_decision_tree_regressor,
+    train_random_forest_regressor,
+    train_mlp_regressor,
+    predict,
+    feature_importance,
+    feature_importance_permutation,
+    save_model,
+    load_model
+)
 
 __all__ = [
     'BaseMLModel',
@@ -15,5 +27,15 @@ __all__ = [
     'SVMModel',
     'DecisionTreeModel',
     'RandomForestModel',
-    'NeuralNetworkModel'
+    'NeuralNetworkModel',
+    'train_linear_regression',
+    'train_svm_regressor',
+    'train_decision_tree_regressor',
+    'train_random_forest_regressor',
+    'train_mlp_regressor',
+    'predict',
+    'feature_importance',
+    'feature_importance_permutation',
+    'save_model',
+    'load_model'
 ]
