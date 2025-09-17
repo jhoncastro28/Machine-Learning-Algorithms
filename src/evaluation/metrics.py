@@ -82,6 +82,36 @@ def cv_score(estimator: Any, X: np.ndarray, y: np.ndarray,
     }
 
 
+def compare_models(y_test: np.ndarray, predictions_dict: Dict[str, np.ndarray], 
+                  metrics_fn: callable) -> pd.DataFrame:
+    """
+    Compara múltiples modelos usando las métricas especificadas.
+    
+    Args:
+        y_test: Valores reales de prueba
+        predictions_dict: Diccionario con {nombre_modelo: predicciones}
+        metrics_fn: Función para calcular métricas (ej: metrics_regression)
+        
+    Returns:
+        pd.DataFrame: Tabla de comparación con métricas por modelo
+    """
+    results_list = []
+    
+    for model_name, y_pred in predictions_dict.items():
+        # Calcular métricas para este modelo
+        metrics = metrics_fn(y_test, y_pred)
+        
+        # Crear fila de resultados
+        result_row = {'Modelo': model_name}
+        result_row.update(metrics)
+        results_list.append(result_row)
+    
+    # Crear DataFrame de comparación
+    comparison_df = pd.DataFrame(results_list)
+    
+    return comparison_df
+
+
 def save_results_table(results_df: pd.DataFrame, out_path: str) -> None:
     """
     Guarda la tabla de resultados en un archivo CSV.
