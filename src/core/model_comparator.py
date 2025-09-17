@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from ..utils.constants import FILES
+from ..utils.helpers import save_artifact
 from ..utils.helpers import setup_matplotlib
 import warnings
 warnings.filterwarnings('ignore')
@@ -366,6 +367,12 @@ class ModelComparator:
         
         self.comparison_df.to_csv(filename, index=False)
         print(f"✅ Resultados guardados en {filename}")
+        # Guardar un snapshot de resultados también como artefacto pkl para trazabilidad
+        try:
+            save_artifact(self.comparison_df, filename.replace('.csv', '.pkl'), metadata={'type': 'comparison_df'})
+            print(f"[RESULTS] Snapshot saved: {filename.replace('.csv', '.pkl')}")
+        except Exception:
+            pass
     
     def generate_report(self):
         """

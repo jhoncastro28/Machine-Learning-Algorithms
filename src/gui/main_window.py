@@ -22,6 +22,7 @@ from ..models import (
     RandomForestModel, NeuralNetworkModel
 )
 from ..utils.constants import COLORS, STYLES, FILES
+from ..utils.helpers import ensure_models_dir, load_artifact, save_artifact, is_artifact_valid
 
 class CoffeeShopMLGUI:
     """
@@ -468,6 +469,9 @@ class CoffeeShopMLGUI:
                     "Random Forest": RandomForestModel(),
                     "Redes Neuronales": NeuralNetworkModel()
                 }
+                ensure_models_dir()
+                model_pkls = FILES.get('model_pkls', {})
+                source_files = [FILES.get('csv_data', 'coffee_shop_revenue.csv')]
                 
                 total_models = len(self.models)
                 
@@ -476,11 +480,29 @@ class CoffeeShopMLGUI:
                     self.log_message(f"🔄 Entrenando {name}...", "INFO")
                     
                     try:
-                        model.train(X_train, y_train)
+                        pkl_path = model_pkls.get(name)
+                        loaded = False
+                        if pkl_path and is_artifact_valid(pkl_path, source_files):
+                            loaded_model, metadata = load_artifact(pkl_path)
+                            if loaded_model is not None:
+                                model = loaded_model
+                                self.models[name] = model
+                                loaded = True
+                                self.log_message(f"📦 {name}: cargado desde cache", "INFO")
+                                print(f"[MODEL] Loaded from cache: {name} -> {pkl_path}")
+                        if not loaded:
+                            model.train(X_train, y_train)
+                            # Guardar modelo
+                            if pkl_path:
+                                save_artifact(model, pkl_path, metadata={
+                                    'model_name': name
+                                })
+                                print(f"[MODEL] Trained and saved: {name} -> {pkl_path}")
+                            self.log_message(f"✅ {name} entrenado y guardado", "SUCCESS")
+                        # Añadir al comparador
                         self.comparator.add_model(model, name)
-                        self.log_message(f"✅ {name} entrenado exitosamente", "SUCCESS")
                     except Exception as e:
-                        self.log_message(f"❌ Error entrenando {name}: {e}", "ERROR")
+                        self.log_message(f"❌ Error entrenando/cargando {name}: {e}", "ERROR")
                     
                     # Actualizar progreso
                     progress = ((i + 1) / total_models) * 100

@@ -43,5 +43,14 @@ MODEL_CONFIG = {
 FILES = {
     'csv_data': 'coffee_shop_revenue.csv',
     'results_csv': 'resultados_comparacion_modelos.csv',
-    'predictions_csv': 'predicciones_modelos.csv'
+    'predictions_csv': 'predicciones_modelos.csv',
+    'models_dir': 'models_store',
+    'scaler_pkl': 'models_store/scaler.pkl',
+    'model_pkls': {
+        'Regresión Logística': 'models_store/model_logistic_regression.pkl',
+        'Máquinas de Vector de Soporte': 'models_store/model_svm.pkl',
+        'Árboles de Decisión': 'models_store/model_decision_tree.pkl',
+        'Random Forest': 'models_store/model_random_forest.pkl',
+        'Redes Neuronales': 'models_store/model_neural_network.pkl'
+    }
 }
