@@ -41,6 +41,7 @@ from src.models.regression_functions import (
 )
 from src.eda.eda_plots import create_eda_plots
 from src.utils.helpers import setup_matplotlib
+from src.utils.metadata import generate_run_metadata, set_global_random_seeds, validate_reproducibility_setup
 
 warnings.filterwarnings('ignore')
 
@@ -61,6 +62,13 @@ class BatchPipeline:
         self.model_comparator = ModelComparator()
         self.trained_models = {}
         self.results = {}
+        
+        # Validar configuración de reproducibilidad
+        validate_reproducibility_setup(self.config)
+        
+        # Establecer semillas globales
+        random_state = self.config.get('preprocessing', {}).get('random_state', 42)
+        set_global_random_seeds(random_state)
         
         # Configurar matplotlib
         setup_matplotlib()
@@ -227,6 +235,7 @@ class BatchPipeline:
         n_iter = self.config['training']['n_iter']
         scoring = self.config['training']['scoring']
         n_jobs = self.config['training']['n_jobs']
+        random_state = self.config['training']['random_state']
         
         # Entrenar cada modelo habilitado
         models_config = self.config['models']
@@ -235,16 +244,16 @@ class BatchPipeline:
             self._train_linear_regression(X_train, y_train, X_test, y_test)
         
         if models_config['svm']['enabled']:
-            self._train_svm(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs)
+            self._train_svm(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
         
         if models_config['decision_tree']['enabled']:
-            self._train_decision_tree(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs)
+            self._train_decision_tree(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
         
         if models_config['random_forest']['enabled']:
-            self._train_random_forest(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs)
+            self._train_random_forest(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
         
         if models_config['neural_network']['enabled']:
-            self._train_neural_network(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs)
+            self._train_neural_network(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
         
         print(f"\n✅ Entrenamiento completado para {len(self.trained_models)} modelos")
         return True
@@ -282,7 +291,7 @@ class BatchPipeline:
         except Exception as e:
             print(f"❌ Error entrenando Regresión Lineal: {e}")
     
-    def _train_svm(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs):
+    def _train_svm(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
         Entrena modelo SVM con búsqueda de hiperparámetros
         """
@@ -293,7 +302,7 @@ class BatchPipeline:
             search_space = self.config['models']['svm']['hyperparameters']
             
             # Usar función existente
-            model = train_svm_regressor(X_train, y_train, search_space, cv_folds, n_iter)
+            model = train_svm_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
@@ -318,7 +327,7 @@ class BatchPipeline:
         except Exception as e:
             print(f"❌ Error entrenando SVM: {e}")
     
-    def _train_decision_tree(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs):
+    def _train_decision_tree(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
         Entrena modelo de árbol de decisión con búsqueda de hiperparámetros
         """
@@ -329,7 +338,7 @@ class BatchPipeline:
             search_space = self.config['models']['decision_tree']['hyperparameters']
             
             # Usar función existente
-            model = train_decision_tree_regressor(X_train, y_train, search_space, cv_folds, n_iter)
+            model = train_decision_tree_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
@@ -354,7 +363,7 @@ class BatchPipeline:
         except Exception as e:
             print(f"❌ Error entrenando Árbol de Decisión: {e}")
     
-    def _train_random_forest(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs):
+    def _train_random_forest(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
         Entrena modelo Random Forest con búsqueda de hiperparámetros
         """
@@ -365,7 +374,7 @@ class BatchPipeline:
             search_space = self.config['models']['random_forest']['hyperparameters']
             
             # Usar función existente
-            model = train_random_forest_regressor(X_train, y_train, search_space, cv_folds, n_iter)
+            model = train_random_forest_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
@@ -390,7 +399,7 @@ class BatchPipeline:
         except Exception as e:
             print(f"❌ Error entrenando Random Forest: {e}")
     
-    def _train_neural_network(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs):
+    def _train_neural_network(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
         Entrena modelo de red neuronal con búsqueda de hiperparámetros
         """
@@ -401,7 +410,7 @@ class BatchPipeline:
             search_space = self.config['models']['neural_network']['hyperparameters']
             
             # Usar función existente
-            model = train_mlp_regressor(X_train, y_train, search_space, cv_folds, n_iter)
+            model = train_mlp_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
@@ -702,6 +711,26 @@ class BatchPipeline:
         except Exception as e:
             print(f"⚠️  Error al generar gráficos de predicciones: {e}")
     
+    def generate_execution_metadata(self):
+        """
+        Genera metadatos de ejecución para reproducibilidad
+        """
+        print("\n📋 Generando metadatos de ejecución...")
+        
+        try:
+            # Obtener rutas de archivos
+            config_path = "config.json"  # Asumiendo que se usa el config por defecto
+            dataset_path = self.config['data']['csv_path']
+            output_dir = self.config['output']['reports_dir']
+            
+            # Generar metadatos
+            metadata = generate_run_metadata(config_path, dataset_path, output_dir)
+            
+            print("✅ Metadatos de ejecución generados exitosamente")
+            
+        except Exception as e:
+            print(f"⚠️  Error al generar metadatos: {e}")
+    
     def run_pipeline(self):
         """
         Ejecuta el pipeline completo
@@ -732,6 +761,9 @@ class BatchPipeline:
             
             # 6. Generar gráficos
             self.generate_visualization_plots()
+            
+            # 7. Generar metadatos de ejecución
+            self.generate_execution_metadata()
             
             # Resumen final
             end_time = datetime.now()
