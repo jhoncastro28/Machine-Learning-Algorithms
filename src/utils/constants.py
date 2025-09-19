@@ -47,7 +47,7 @@ FILES = {
     'models_dir': 'models_store',
     'scaler_pkl': 'models_store/scaler.pkl',
     'model_pkls': {
-        'Regresión Logística': 'models_store/model_logistic_regression.pkl',
+        'Regresión Lineal': 'models_store/model_linear_regression.pkl',
         'Máquinas de Vector de Soporte': 'models_store/model_svm.pkl',
         'Árboles de Decisión': 'models_store/model_decision_tree.pkl',
         'Random Forest': 'models_store/model_random_forest.pkl',

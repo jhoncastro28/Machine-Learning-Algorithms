@@ -13,7 +13,7 @@ Este proyecto implementa un análisis completo de Machine Learning para predecir
 
 ## 🤖 Algoritmos Implementados
 
-1. **Regresión Logística** - Modelo lineal para clasificación/regresión
+1. **Regresión Lineal** - Modelo lineal para regresión
 2. **Máquinas de Vector de Soporte (SVM)** - Algoritmo de aprendizaje supervisado
 3. **Árboles de Decisión** - Modelo de árbol para regresión
 4. **Random Forest** - Ensemble de árboles de decisión
@@ -67,7 +67,7 @@ python main.py
 │   │   └── model_comparator.py  # Comparación y evaluación de modelos
 │   ├── models/           # Algoritmos de Machine Learning
 │   │   ├── base_model.py        # Clase base para modelos
-│   │   ├── logistic_regression.py
+│   │   ├── linear_regression.py
 │   │   ├── svm_model.py
 │   │   ├── decision_tree.py
 │   │   ├── random_forest.py

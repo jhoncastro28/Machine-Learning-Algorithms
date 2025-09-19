@@ -207,6 +207,17 @@ def plot_scatter_pairs(df: pd.DataFrame, out_dir: str = "figures", max_vars: int
     print(f"Gráfico de pares de dispersión guardado en: {output_path}")
 
 
+def create_eda_plots(df: pd.DataFrame, save_path: str = "figures") -> None:
+    """
+    Función wrapper para generar gráficos EDA (compatible con pipeline CLI).
+    
+    Args:
+        df (pd.DataFrame): Dataset a analizar
+        save_path (str): Directorio donde guardar las imágenes (default: "figures")
+    """
+    generate_eda_report(df, save_path)
+
+
 def generate_eda_report(df: pd.DataFrame, out_dir: str = "figures") -> None:
     """
     Genera un reporte completo de EDA con todas las visualizaciones.

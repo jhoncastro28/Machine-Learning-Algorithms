@@ -129,3 +129,7 @@ Thumbs.db
 *.jpeg
 *.gif
 *.ico
+
+/figures
+/.git
+/__pycache__

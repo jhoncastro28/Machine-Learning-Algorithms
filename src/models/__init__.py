@@ -3,7 +3,7 @@ Módulo models - Algoritmos de Machine Learning
 """
 
 from .base_model import BaseMLModel
-from .logistic_regression import LogisticRegressionModel
+from .linear_regression import LinearRegressionModel
 from .svm_model import SVMModel
 from .decision_tree import DecisionTreeModel
 from .random_forest import RandomForestModel
@@ -23,7 +23,7 @@ from .regression_functions import (
 
 __all__ = [
     'BaseMLModel',
-    'LogisticRegressionModel', 
+    'LinearRegressionModel', 
     'SVMModel',
     'DecisionTreeModel',
     'RandomForestModel',
