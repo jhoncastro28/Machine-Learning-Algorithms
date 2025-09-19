@@ -11,14 +11,14 @@ import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from ..utils.constants import MODEL_CONFIG, FILES
+from ..utils.helpers import setup_matplotlib, ensure_models_dir, save_artifact, load_artifact, is_artifact_valid
+import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# Configuración para gráficos en español
-plt.rcParams['font.size'] = 10
-plt.rcParams['figure.figsize'] = (12, 8)
-sns.set_style("whitegrid")
-sns.set_palette("husl")
+# Configurar matplotlib
+setup_matplotlib()
 
 class DataHandler:
     """
@@ -103,9 +103,9 @@ class DataHandler:
             print("❌ Primero debe cargar los datos")
             return
         
-        # Configurar subplots
-        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-        fig.suptitle('📊 Análisis Exploratorio de Datos - Cafeterías', fontsize=16, fontweight='bold')
+        # Configurar subplots con layout ajustado para minimizar superposición
+        fig, axes = plt.subplots(2, 3, figsize=(20, 12), constrained_layout=True)
+        fig.suptitle('📊 Análisis Exploratorio de Datos - Cafeterías', fontsize=16, fontweight='bold', y=0.99)
         
         # 1. Distribución de ingresos diarios
         axes[0, 0].hist(self.data['Daily_Revenue'], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
@@ -113,20 +113,22 @@ class DataHandler:
         axes[0, 0].set_xlabel('Ingresos Diarios ($)')
         axes[0, 0].set_ylabel('Frecuencia')
         axes[0, 0].grid(True, alpha=0.3)
+        axes[0, 0].margins(x=0.02)
         
         # 2. Correlación con ingresos
         correlations = self.data.corr()['Daily_Revenue'].drop('Daily_Revenue').sort_values(ascending=True)
         colors = ['red' if x < 0 else 'green' for x in correlations.values]
         axes[0, 1].barh(range(len(correlations)), correlations.values, color=colors, alpha=0.7)
         axes[0, 1].set_yticks(range(len(correlations)))
-        axes[0, 1].set_yticklabels(correlations.index, fontsize=9)
+        axes[0, 1].set_yticklabels(correlations.index, fontsize=8)
         axes[0, 1].set_title('Correlación con Ingresos Diarios', fontweight='bold')
         axes[0, 1].set_xlabel('Coeficiente de Correlación')
         axes[0, 1].grid(True, alpha=0.3)
+        axes[0, 1].margins(y=0.05)
         
         # 3. Clientes vs Ingresos
         axes[0, 2].scatter(self.data['Number_of_Customers_Per_Day'], self.data['Daily_Revenue'], 
-                          alpha=0.6, color='purple')
+                          alpha=0.5, color='purple', s=25)
         axes[0, 2].set_title('Clientes Diarios vs Ingresos', fontweight='bold')
         axes[0, 2].set_xlabel('Número de Clientes por Día')
         axes[0, 2].set_ylabel('Ingresos Diarios ($)')
@@ -134,7 +136,7 @@ class DataHandler:
         
         # 4. Valor promedio de orden vs Ingresos
         axes[1, 0].scatter(self.data['Average_Order_Value'], self.data['Daily_Revenue'], 
-                          alpha=0.6, color='orange')
+                          alpha=0.5, color='orange', s=25)
         axes[1, 0].set_title('Valor Promedio de Orden vs Ingresos', fontweight='bold')
         axes[1, 0].set_xlabel('Valor Promedio de Orden ($)')
         axes[1, 0].set_ylabel('Ingresos Diarios ($)')
@@ -142,48 +144,43 @@ class DataHandler:
         
         # 5. Horas de operación vs Ingresos
         axes[1, 1].scatter(self.data['Operating_Hours_Per_Day'], self.data['Daily_Revenue'], 
-                          alpha=0.6, color='red')
+                          alpha=0.5, color='red', s=25)
         axes[1, 1].set_title('Horas de Operación vs Ingresos', fontweight='bold')
         axes[1, 1].set_xlabel('Horas de Operación por Día')
         axes[1, 1].set_ylabel('Ingresos Diarios ($)')
         axes[1, 1].grid(True, alpha=0.3)
         
-        # 6. Matriz de correlación
+        # 6. Matriz de correlación (heatmap compacto)
         corr_matrix = self.data.corr()
-        im = axes[1, 2].imshow(corr_matrix, cmap='coolwarm', aspect='auto', vmin=-1, vmax=1)
+        sns.heatmap(
+            corr_matrix,
+            ax=axes[1, 2],
+            cmap='coolwarm', vmin=-1, vmax=1,
+            annot=True, fmt='.2f', annot_kws={'size': 7},
+            cbar_kws={'shrink': 0.8}
+        )
         axes[1, 2].set_title('Matriz de Correlación', fontweight='bold')
-        axes[1, 2].set_xticks(range(len(corr_matrix.columns)))
-        axes[1, 2].set_yticks(range(len(corr_matrix.columns)))
-        axes[1, 2].set_xticklabels(corr_matrix.columns, rotation=45, ha='right', fontsize=8)
-        axes[1, 2].set_yticklabels(corr_matrix.columns, fontsize=8)
-        
-        # Añadir valores de correlación
-        for i in range(len(corr_matrix.columns)):
-            for j in range(len(corr_matrix.columns)):
-                text = axes[1, 2].text(j, i, f'{corr_matrix.iloc[i, j]:.2f}',
-                                     ha="center", va="center", color="black", fontsize=7)
-        
-        plt.colorbar(im, ax=axes[1, 2], shrink=0.8)
-        plt.tight_layout()
+        axes[1, 2].tick_params(axis='x', labelrotation=45, labelsize=8)
+        axes[1, 2].tick_params(axis='y', labelsize=8)
         plt.show()
         
-        # Gráfico adicional: Boxplot de ingresos por rangos de clientes
-        plt.figure(figsize=(12, 6))
-        
+        # Gráfico adicional: Boxplot de ingresos por rangos de clientes (evitar superposición con figura 1)
+        plt.figure(figsize=(10, 5), constrained_layout=True)
         # Crear rangos de clientes
-        self.data['Customer_Range'] = pd.cut(self.data['Number_of_Customers_Per_Day'], 
-                                           bins=5, labels=['Muy Bajo', 'Bajo', 'Medio', 'Alto', 'Muy Alto'])
-        
-        sns.boxplot(data=self.data, x='Customer_Range', y='Daily_Revenue', palette='Set2')
-        plt.title('📊 Distribución de Ingresos por Rango de Clientes', fontsize=14, fontweight='bold')
-        plt.xlabel('Rango de Clientes Diarios', fontweight='bold')
-        plt.ylabel('Ingresos Diarios ($)', fontweight='bold')
-        plt.xticks(rotation=45)
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
+        self.data['Customer_Range'] = pd.cut(
+            self.data['Number_of_Customers_Per_Day'], 
+            bins=5, labels=['Muy Bajo', 'Bajo', 'Medio', 'Alto', 'Muy Alto']
+        )
+        ax_box = sns.boxplot(data=self.data, x='Customer_Range', y='Daily_Revenue', palette='Set2')
+        ax_box.set_title('📊 Distribución de Ingresos por Rango de Clientes', fontsize=14, fontweight='bold')
+        ax_box.set_xlabel('Rango de Clientes Diarios', fontweight='bold')
+        ax_box.set_ylabel('Ingresos Diarios ($)', fontweight='bold')
+        for label in ax_box.get_xticklabels():
+            label.set_rotation(0)
+        ax_box.grid(True, axis='y', alpha=0.3)
         plt.show()
     
-    def prepare_data(self, test_size=0.2, random_state=42):
+    def prepare_data(self, test_size=None, random_state=None):
         """
         Prepara los datos para el entrenamiento
         
@@ -194,6 +191,12 @@ class DataHandler:
         if self.data is None:
             print("❌ Primero debe cargar los datos")
             return False
+        
+        # Usar valores por defecto de configuración si no se proporcionan
+        if test_size is None:
+            test_size = MODEL_CONFIG['test_size']
+        if random_state is None:
+            random_state = MODEL_CONFIG['random_state']
         
         print("\n" + "="*60)
         print("🔧 PREPARACIÓN DE DATOS")
@@ -219,8 +222,30 @@ class DataHandler:
         print(f"   • Conjunto de prueba: {self.X_test.shape[0]:,} muestras")
         print(f"   • Características: {self.X_train.shape[1]}")
         
-        # Estandarizar las características
-        self.X_train_scaled = self.scaler.fit_transform(self.X_train)
+        # Persistencia del scaler: si existe y es válido, cargar; si no, entrenar y guardar
+        ensure_models_dir()
+        scaler_path = FILES.get('scaler_pkl', os.path.join(FILES.get('models_dir', 'models_store'), 'scaler.pkl'))
+        source_files = [self.csv_path]
+        loaded_scaler, _ = (None, None)
+        if is_artifact_valid(scaler_path, source_files):
+            try:
+                loaded_scaler, _ = load_artifact(scaler_path)
+                if loaded_scaler is not None:
+                    print(f"[SCALER] Loaded cached scaler from {scaler_path}")
+            except Exception:
+                loaded_scaler = None
+        if loaded_scaler is not None:
+            self.scaler = loaded_scaler
+        else:
+            # Ajustar de nuevo y guardar
+            self.scaler.fit(self.X_train)
+            save_artifact(self.scaler, scaler_path, metadata={
+                'type': 'StandardScaler',
+                'feature_names': self.feature_names
+            })
+            print(f"[SCALER] Fitted and cached scaler to {scaler_path}")
+        # Transformar con el scaler (cargado o entrenado)
+        self.X_train_scaled = self.scaler.transform(self.X_train)
         self.X_test_scaled = self.scaler.transform(self.X_test)
         
         print(f"✅ Datos preparados y estandarizados exitosamente")
