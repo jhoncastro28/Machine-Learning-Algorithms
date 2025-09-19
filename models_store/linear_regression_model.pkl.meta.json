@@ -1,8 +1,0 @@
-{
-  "type": "linear_regression",
-  "config": {
-    "enabled": true,
-    "search_space": {}
-  },
-  "saved_at": "2025-09-17T22:18:51.222718Z"
-}
