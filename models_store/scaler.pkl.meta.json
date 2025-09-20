@@ -1,0 +1,12 @@
+{
+  "type": "StandardScaler",
+  "feature_names": [
+    "Number_of_Customers_Per_Day",
+    "Average_Order_Value",
+    "Operating_Hours_Per_Day",
+    "Number_of_Employees",
+    "Marketing_Spend_Per_Day",
+    "Location_Foot_Traffic"
+  ],
+  "saved_at": "2025-09-20T02:34:49.590613Z"
+}
