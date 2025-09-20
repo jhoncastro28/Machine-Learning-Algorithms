@@ -12,6 +12,12 @@ import sys
 import os
 from pathlib import Path
 
+# Configurar codificación UTF-8 para Windows
+if sys.platform == "win32":
+    import codecs
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
+
 # Agregar el directorio raíz al path
 sys.path.append(str(Path(__file__).parent))
 
@@ -28,25 +34,25 @@ def main():
     
     # Verificar que el archivo de configuración existe
     if not os.path.exists(config_path):
-        print(f"❌ Archivo de configuración no encontrado: {config_path}")
-        print("💡 Usando configuración por defecto...")
+        print(f"[ERROR] Archivo de configuración no encontrado: {config_path}")
+        print("[INFO] Usando configuración por defecto...")
         config_path = "config.json"
     
-    print("🚀 Iniciando pipeline batch reproducible...")
-    print(f"📋 Configuración: {config_path}")
+    print("[INICIO] Iniciando pipeline batch reproducible...")
+    print(f"[CONFIG] Configuración: {config_path}")
     
     # Ejecutar pipeline
     success = run_batch(config_path)
     
     if success:
-        print("\n🎉 Pipeline ejecutado exitosamente!")
-        print("📁 Revisa los resultados en:")
+        print("\n[EXITO] Pipeline ejecutado exitosamente!")
+        print("[RESULTADOS] Revisa los resultados en:")
         print("   • reports/tables/ - Tablas de comparación y predicciones")
         print("   • reports/figures/ - Gráficos y visualizaciones")
         print("   • models_store/ - Modelos entrenados")
         return 0
     else:
-        print("\n💥 Pipeline falló!")
+        print("\n[ERROR] Pipeline falló!")
         return 1
 
 if __name__ == "__main__":
