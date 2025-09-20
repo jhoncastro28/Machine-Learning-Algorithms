@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).parent))
 from cli.run_batch import run_batch
 
 def main():
-    """g
+    """
     Función principal para ejecutar el pipeline
     """
     # Obtener archivo de configuración (opcional)
