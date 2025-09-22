@@ -32,11 +32,12 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.core.data_handler import DataHandler
 from src.core.model_comparator import ModelComparator
 from src.models.regression_functions import (
-    train_linear_regression,
-    train_svm_regressor,
-    train_decision_tree_regressor,
-    train_random_forest_regressor,
-    train_mlp_regressor,
+    train_logistic_regression,
+    train_svm_classifier,
+    train_decision_tree_classifier,
+    train_random_forest_classifier,
+    train_mlp_classifier,
+    evaluate_classification_model,
     save_model
 )
 from src.eda.eda_plots import create_eda_plots
@@ -203,7 +204,7 @@ class BatchPipeline:
         test_size = self.config['preprocessing']['test_size']
         random_state = self.config['preprocessing']['random_state']
         
-        if not self.data_handler.prepare_data(test_size=test_size, random_state=random_state):
+        if not self.data_handler.prepare_data(test_size=test_size, random_state=random_state, classification=True):
             print("❌ Error al preparar los datos")
             return False
         
@@ -240,8 +241,8 @@ class BatchPipeline:
         # Entrenar cada modelo habilitado
         models_config = self.config['models']
         
-        if models_config['linear_regression']['enabled']:
-            self._train_linear_regression(X_train, y_train, X_test, y_test)
+        if models_config['logistic_regression']['enabled']:
+            self._train_logistic_regression(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
         
         if models_config['svm']['enabled']:
             self._train_svm(X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state)
@@ -258,38 +259,41 @@ class BatchPipeline:
         print(f"\n✅ Entrenamiento completado para {len(self.trained_models)} modelos")
         return True
     
-    def _train_linear_regression(self, X_train, y_train, X_test, y_test):
+    def _train_logistic_regression(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
-        Entrena modelo de regresión lineal
+        Entrena modelo de regresión logística
         """
-        print("\n🔄 Entrenando Regresión Lineal...")
+        print("\n🔄 Entrenando Regresión Logística...")
         
         try:
+            # Obtener espacio de búsqueda de configuración
+            search_space = self.config['models']['logistic_regression']['hyperparameters']
+            
             # Usar función existente
-            model = train_linear_regression(X_train, y_train)
+            model = train_logistic_regression(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
             
-            # Calcular métricas
-            metrics = self._calculate_metrics(y_test, y_pred, "Regresión Lineal")
+            # Calcular métricas de clasificación
+            metrics, _ = evaluate_classification_model(model, X_test, y_test, "Regresión Logística")
             
             # Guardar modelo
             if self.config['output']['save_models']:
-                model_path = os.path.join(self.config['output']['models_dir'], 'linear_regression.pkl')
+                model_path = os.path.join(self.config['output']['models_dir'], 'logistic_regression.pkl')
                 joblib.dump(model, model_path)
                 print(f"✅ Modelo guardado en {model_path}")
             
             # Almacenar resultados
-            self.trained_models["Regresión Lineal"] = model
-            self.results["Regresión Lineal"] = {
+            self.trained_models["Regresión Logística"] = model
+            self.results["Regresión Logística"] = {
                 'model': model,
                 'predictions': y_pred,
                 'metrics': metrics
             }
             
         except Exception as e:
-            print(f"❌ Error entrenando Regresión Lineal: {e}")
+            print(f"❌ Error entrenando Regresión Logística: {e}")
     
     def _train_svm(self, X_train, y_train, X_test, y_test, cv_folds, n_iter, scoring, n_jobs, random_state):
         """
@@ -302,13 +306,13 @@ class BatchPipeline:
             search_space = self.config['models']['svm']['hyperparameters']
             
             # Usar función existente
-            model = train_svm_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
+            model = train_svm_classifier(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
             
-            # Calcular métricas
-            metrics = self._calculate_metrics(y_test, y_pred, "SVM")
+            # Calcular métricas de clasificación
+            metrics, _ = evaluate_classification_model(model, X_test, y_test, "SVM")
             
             # Guardar modelo
             if self.config['output']['save_models']:
@@ -338,13 +342,13 @@ class BatchPipeline:
             search_space = self.config['models']['decision_tree']['hyperparameters']
             
             # Usar función existente
-            model = train_decision_tree_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
+            model = train_decision_tree_classifier(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
             
-            # Calcular métricas
-            metrics = self._calculate_metrics(y_test, y_pred, "Árbol de Decisión")
+            # Calcular métricas de clasificación
+            metrics, _ = evaluate_classification_model(model, X_test, y_test, "Árbol de Decisión")
             
             # Guardar modelo
             if self.config['output']['save_models']:
@@ -374,13 +378,13 @@ class BatchPipeline:
             search_space = self.config['models']['random_forest']['hyperparameters']
             
             # Usar función existente
-            model = train_random_forest_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
+            model = train_random_forest_classifier(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
             
-            # Calcular métricas
-            metrics = self._calculate_metrics(y_test, y_pred, "Random Forest")
+            # Calcular métricas de clasificación
+            metrics, _ = evaluate_classification_model(model, X_test, y_test, "Random Forest")
             
             # Guardar modelo
             if self.config['output']['save_models']:
@@ -410,13 +414,13 @@ class BatchPipeline:
             search_space = self.config['models']['neural_network']['hyperparameters']
             
             # Usar función existente
-            model = train_mlp_regressor(X_train, y_train, search_space, cv_folds, n_iter, random_state)
+            model = train_mlp_classifier(X_train, y_train, search_space, cv_folds, n_iter, random_state)
             
             # Realizar predicciones
             y_pred = model.predict(X_test)
             
-            # Calcular métricas
-            metrics = self._calculate_metrics(y_test, y_pred, "Red Neuronal")
+            # Calcular métricas de clasificación
+            metrics, _ = evaluate_classification_model(model, X_test, y_test, "Red Neuronal")
             
             # Guardar modelo
             if self.config['output']['save_models']:
@@ -437,7 +441,7 @@ class BatchPipeline:
     
     def _calculate_metrics(self, y_true, y_pred, model_name):
         """
-        Calcula métricas de evaluación
+        Calcula métricas de evaluación para clasificación
         
         Args:
             y_true: Valores reales
@@ -447,26 +451,25 @@ class BatchPipeline:
         Returns:
             dict: Diccionario con métricas
         """
-        mse = mean_squared_error(y_true, y_pred)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(y_true, y_pred)
-        r2 = r2_score(y_true, y_pred)
-        mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+        
+        accuracy = accuracy_score(y_true, y_pred)
+        precision = precision_score(y_true, y_pred, average='weighted')
+        recall = recall_score(y_true, y_pred, average='weighted')
+        f1 = f1_score(y_true, y_pred, average='weighted')
         
         metrics = {
             'Modelo': model_name,
-            'MSE': round(mse, 4),
-            'RMSE': round(rmse, 4),
-            'MAE': round(mae, 4),
-            'R²': round(r2, 4),
-            'MAPE (%)': round(mape, 2)
+            'Accuracy': round(accuracy, 4),
+            'Precision': round(precision, 4),
+            'Recall': round(recall, 4),
+            'F1-Score': round(f1, 4)
         }
         
-        print(f"   • MSE: {mse:,.2f}")
-        print(f"   • RMSE: {rmse:,.2f}")
-        print(f"   • MAE: {mae:,.2f}")
-        print(f"   • R²: {r2:.4f}")
-        print(f"   • MAPE: {mape:.2f}%")
+        print(f"   • Accuracy: {accuracy:.4f}")
+        print(f"   • Precision: {precision:.4f}")
+        print(f"   • Recall: {recall:.4f}")
+        print(f"   • F1-Score: {f1:.4f}")
         
         return metrics
     
@@ -495,11 +498,10 @@ class BatchPipeline:
         
         # Identificar mejores modelos
         print(f"\n🏆 MEJORES MODELOS POR MÉTRICA:")
-        print(f"   • Mejor MSE (menor): {comparison_df.loc[comparison_df['MSE'].idxmin(), 'Modelo']}")
-        print(f"   • Mejor RMSE (menor): {comparison_df.loc[comparison_df['RMSE'].idxmin(), 'Modelo']}")
-        print(f"   • Mejor MAE (menor): {comparison_df.loc[comparison_df['MAE'].idxmin(), 'Modelo']}")
-        print(f"   • Mejor R² (mayor): {comparison_df.loc[comparison_df['R²'].idxmax(), 'Modelo']}")
-        print(f"   • Mejor MAPE (menor): {comparison_df.loc[comparison_df['MAPE (%)'].idxmin(), 'Modelo']}")
+        print(f"   • Mejor Accuracy (mayor): {comparison_df.loc[comparison_df['Accuracy'].idxmax(), 'Modelo']}")
+        print(f"   • Mejor Precision (mayor): {comparison_df.loc[comparison_df['Precision'].idxmax(), 'Modelo']}")
+        print(f"   • Mejor Recall (mayor): {comparison_df.loc[comparison_df['Recall'].idxmax(), 'Modelo']}")
+        print(f"   • Mejor F1-Score (mayor): {comparison_df.loc[comparison_df['F1-Score'].idxmax(), 'Modelo']}")
         
         # Guardar tabla de comparación
         if self.config['output']['save_comparison']:
@@ -574,68 +576,43 @@ class BatchPipeline:
             metrics_df = pd.DataFrame(metrics_data)
             
             # Configurar subplots
-            fig, axes = plt.subplots(2, 3, figsize=(20, 12))
-            fig.suptitle('📊 Comparación de Métricas de Modelos', fontsize=16, fontweight='bold')
+            fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+            fig.suptitle('📊 Comparación de Métricas de Clasificación', fontsize=16, fontweight='bold')
             
             # Colores para cada modelo
             colors = plt.cm.Set3(np.linspace(0, 1, len(metrics_df)))
             
-            # 1. MSE
-            axes[0, 0].bar(metrics_df['Modelo'], metrics_df['MSE'], color=colors)
-            axes[0, 0].set_title('Error Cuadrático Medio (MSE)', fontweight='bold')
-            axes[0, 0].set_ylabel('MSE')
+            # 1. Accuracy
+            axes[0, 0].bar(metrics_df['Modelo'], metrics_df['Accuracy'], color=colors)
+            axes[0, 0].set_title('Accuracy (Precisión)', fontweight='bold')
+            axes[0, 0].set_ylabel('Accuracy')
             axes[0, 0].tick_params(axis='x', rotation=45)
             axes[0, 0].grid(True, alpha=0.3)
+            axes[0, 0].set_ylim(0, 1)
             
-            # 2. RMSE
-            axes[0, 1].bar(metrics_df['Modelo'], metrics_df['RMSE'], color=colors)
-            axes[0, 1].set_title('Raíz del Error Cuadrático Medio (RMSE)', fontweight='bold')
-            axes[0, 1].set_ylabel('RMSE')
+            # 2. Precision
+            axes[0, 1].bar(metrics_df['Modelo'], metrics_df['Precision'], color=colors)
+            axes[0, 1].set_title('Precision (Precisión)', fontweight='bold')
+            axes[0, 1].set_ylabel('Precision')
             axes[0, 1].tick_params(axis='x', rotation=45)
             axes[0, 1].grid(True, alpha=0.3)
+            axes[0, 1].set_ylim(0, 1)
             
-            # 3. MAE
-            axes[0, 2].bar(metrics_df['Modelo'], metrics_df['MAE'], color=colors)
-            axes[0, 2].set_title('Error Absoluto Medio (MAE)', fontweight='bold')
-            axes[0, 2].set_ylabel('MAE')
-            axes[0, 2].tick_params(axis='x', rotation=45)
-            axes[0, 2].grid(True, alpha=0.3)
-            
-            # 4. R²
-            axes[1, 0].bar(metrics_df['Modelo'], metrics_df['R²'], color=colors)
-            axes[1, 0].set_title('Coeficiente de Determinación (R²)', fontweight='bold')
-            axes[1, 0].set_ylabel('R²')
+            # 3. Recall
+            axes[1, 0].bar(metrics_df['Modelo'], metrics_df['Recall'], color=colors)
+            axes[1, 0].set_title('Recall (Sensibilidad)', fontweight='bold')
+            axes[1, 0].set_ylabel('Recall')
             axes[1, 0].tick_params(axis='x', rotation=45)
             axes[1, 0].grid(True, alpha=0.3)
+            axes[1, 0].set_ylim(0, 1)
             
-            # 5. MAPE
-            axes[1, 1].bar(metrics_df['Modelo'], metrics_df['MAPE (%)'], color=colors)
-            axes[1, 1].set_title('Error Porcentual Absoluto Medio (MAPE)', fontweight='bold')
-            axes[1, 1].set_ylabel('MAPE (%)')
+            # 4. F1-Score
+            axes[1, 1].bar(metrics_df['Modelo'], metrics_df['F1-Score'], color=colors)
+            axes[1, 1].set_title('F1-Score (Media Armónica)', fontweight='bold')
+            axes[1, 1].set_ylabel('F1-Score')
             axes[1, 1].tick_params(axis='x', rotation=45)
             axes[1, 1].grid(True, alpha=0.3)
-            
-            # 6. Comparación múltiple (normalizada)
-            metrics_to_plot = ['MSE', 'RMSE', 'MAE', 'MAPE (%)']
-            normalized_data = metrics_df[metrics_to_plot].copy()
-            
-            # Normalizar datos (0-1)
-            for col in metrics_to_plot:
-                normalized_data[col] = (normalized_data[col] - normalized_data[col].min()) / (normalized_data[col].max() - normalized_data[col].min())
-            
-            x = np.arange(len(metrics_df['Modelo']))
-            width = 0.2
-            
-            for i, metric in enumerate(metrics_to_plot):
-                axes[1, 2].bar(x + i*width, normalized_data[metric], width, 
-                              label=metric, alpha=0.8)
-            
-            axes[1, 2].set_title('Comparación Normalizada de Métricas', fontweight='bold')
-            axes[1, 2].set_ylabel('Valor Normalizado (0-1)')
-            axes[1, 2].set_xticks(x + width * 1.5)
-            axes[1, 2].set_xticklabels(metrics_df['Modelo'], rotation=45)
-            axes[1, 2].legend()
-            axes[1, 2].grid(True, alpha=0.3)
+            axes[1, 1].set_ylim(0, 1)
             
             plt.tight_layout()
             plt.savefig(os.path.join(self.config['output']['figures_dir'], 'metrics_comparison.png'), 
@@ -647,15 +624,18 @@ class BatchPipeline:
     
     def _plot_predictions_vs_actual(self, y_test):
         """
-        Crea gráficos de predicciones vs valores reales
+        Crea gráficos de matriz de confusión para clasificación
         """
         try:
+            from sklearn.metrics import confusion_matrix
+            import seaborn as sns
+            
             n_models = len(self.results)
             cols = 2
             rows = (n_models + 1) // 2
             
             fig, axes = plt.subplots(rows, cols, figsize=(15, 5*rows))
-            fig.suptitle('🎯 Predicciones vs Valores Reales', fontsize=16, fontweight='bold')
+            fig.suptitle('🎯 Matrices de Confusión - Clasificación', fontsize=16, fontweight='bold')
             
             if n_models == 1:
                 axes = [axes]
@@ -674,23 +654,21 @@ class BatchPipeline:
                 y_pred = result['predictions']
                 metrics = result['metrics']
                 
-                # Scatter plot
-                ax.scatter(y_test, y_pred, alpha=0.6, s=50)
+                # Calcular matriz de confusión
+                cm = confusion_matrix(y_test, y_pred)
                 
-                # Línea perfecta (y=x)
-                min_val = min(y_test.min(), y_pred.min())
-                max_val = max(y_test.max(), y_pred.max())
-                ax.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Predicción Perfecta')
+                # Crear heatmap
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax,
+                           xticklabels=sorted(y_test.unique()),
+                           yticklabels=sorted(y_test.unique()))
                 
                 # Configuración del gráfico
-                ax.set_xlabel('Valores Reales', fontweight='bold')
-                ax.set_ylabel('Predicciones', fontweight='bold')
-                ax.set_title(f'{model_name}\nR² = {metrics["R²"]:.4f}', fontweight='bold')
-                ax.grid(True, alpha=0.3)
-                ax.legend()
+                ax.set_xlabel('Predicciones', fontweight='bold')
+                ax.set_ylabel('Valores Reales', fontweight='bold')
+                ax.set_title(f'{model_name}\nAccuracy = {metrics["Accuracy"]:.4f}', fontweight='bold')
                 
                 # Añadir estadísticas
-                ax.text(0.05, 0.95, f'RMSE: {metrics["RMSE"]:.2f}\nMAE: {metrics["MAE"]:.2f}', 
+                ax.text(0.05, 0.95, f'F1-Score: {metrics["F1-Score"]:.4f}\nPrecision: {metrics["Precision"]:.4f}', 
                        transform=ax.transAxes, verticalalignment='top',
                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
             
@@ -704,12 +682,12 @@ class BatchPipeline:
                     axes[row, col].set_visible(False)
             
             plt.tight_layout()
-            plt.savefig(os.path.join(self.config['output']['figures_dir'], 'predictions_vs_actual.png'), 
+            plt.savefig(os.path.join(self.config['output']['figures_dir'], 'confusion_matrices.png'), 
                        dpi=300, bbox_inches='tight')
             plt.close()
             
         except Exception as e:
-            print(f"⚠️  Error al generar gráficos de predicciones: {e}")
+            print(f"⚠️  Error al generar matrices de confusión: {e}")
     
     def generate_execution_metadata(self):
         """

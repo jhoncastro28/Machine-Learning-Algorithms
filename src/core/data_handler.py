@@ -180,13 +180,51 @@ class DataHandler:
         ax_box.grid(True, axis='y', alpha=0.3)
         plt.show()
     
-    def prepare_data(self, test_size=None, random_state=None):
+    def create_revenue_categories(self):
+        """
+        Crea categorías de ingresos para clasificación
+        
+        Returns:
+            pd.Series: Serie con categorías de ingresos
+        """
+        # Definir umbrales basados en percentiles
+        q25 = self.data['Daily_Revenue'].quantile(0.25)
+        q50 = self.data['Daily_Revenue'].quantile(0.50)
+        q75 = self.data['Daily_Revenue'].quantile(0.75)
+        
+        print(f"\n📊 Creando categorías de ingresos:")
+        print(f"   • Bajo: < ${q25:.2f}")
+        print(f"   • Medio: ${q25:.2f} - ${q75:.2f}")
+        print(f"   • Alto: > ${q75:.2f}")
+        
+        # Crear categorías
+        def categorize_revenue(revenue):
+            if revenue < q25:
+                return 'Bajo'
+            elif revenue <= q75:
+                return 'Medio'
+            else:
+                return 'Alto'
+        
+        categories = self.data['Daily_Revenue'].apply(categorize_revenue)
+        
+        # Mostrar distribución de categorías
+        category_counts = categories.value_counts()
+        print(f"\n📈 Distribución de categorías:")
+        for category, count in category_counts.items():
+            percentage = (count / len(categories)) * 100
+            print(f"   • {category}: {count:,} muestras ({percentage:.1f}%)")
+        
+        return categories
+
+    def prepare_data(self, test_size=None, random_state=None, classification=True):
         """
         Prepara los datos para el entrenamiento
         
         Args:
             test_size (float): Proporción de datos para testing
             random_state (int): Semilla para reproducibilidad
+            classification (bool): Si True, convierte a problema de clasificación
         """
         if self.data is None:
             print("❌ Primero debe cargar los datos")
@@ -202,25 +240,39 @@ class DataHandler:
         print("🔧 PREPARACIÓN DE DATOS")
         print("="*60)
         
-        # Separar características y variable objetivo
+        # Separar características
         X = self.data.drop('Daily_Revenue', axis=1)
-        y = self.data['Daily_Revenue']
-        
         self.feature_names = X.columns.tolist()
         
         print(f"📋 Características seleccionadas:")
         for i, feature in enumerate(self.feature_names, 1):
             print(f"   {i}. {feature}")
         
+        # Preparar variable objetivo
+        if classification:
+            print(f"\n🎯 Convirtiendo a problema de CLASIFICACIÓN")
+            y = self.create_revenue_categories()
+        else:
+            print(f"\n🎯 Usando problema de REGRESIÓN")
+            y = self.data['Daily_Revenue']
+        
         # Dividir en entrenamiento y prueba
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state
+            X, y, test_size=test_size, random_state=random_state, stratify=y if classification else None
         )
         
         print(f"\n📊 División de datos:")
         print(f"   • Conjunto de entrenamiento: {self.X_train.shape[0]:,} muestras")
         print(f"   • Conjunto de prueba: {self.X_test.shape[0]:,} muestras")
         print(f"   • Características: {self.X_train.shape[1]}")
+        
+        if classification:
+            print(f"   • Clases objetivo: {y.nunique()}")
+            print(f"   • Distribución en entrenamiento:")
+            train_dist = self.y_train.value_counts()
+            for category, count in train_dist.items():
+                percentage = (count / len(self.y_train)) * 100
+                print(f"     - {category}: {count:,} ({percentage:.1f}%)")
         
         # Persistencia del scaler: si existe y es válido, cargar; si no, entrenar y guardar
         ensure_models_dir()
