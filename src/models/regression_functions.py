@@ -1,18 +1,19 @@
 """
-Funciones independientes para algoritmos de regresión
+Funciones independientes para algoritmos de regresión y clasificación
 """
 
 import numpy as np
 import joblib
 import os
 from typing import Optional, Dict, Any, Union
-from sklearn.linear_model import LinearRegression
-from sklearn.svm import SVR
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.neural_network import MLPRegressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.svm import SVR, SVC
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.inspection import permutation_importance
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -257,3 +258,319 @@ def load_model(name):
     estimator = joblib.load(filepath)
     print(f"Modelo cargado desde: {filepath}")
     return estimator
+
+
+# =============================================================================
+# FUNCIONES DE CLASIFICACIÓN
+# =============================================================================
+
+def train_logistic_regression(X_train_t, y_train, search_space=None, cv=5, n_iter=50, random_state=42):
+    """
+    Entrena un modelo de Regresión Logística con búsqueda de hiperparámetros
+    
+    Args:
+        X_train_t: Datos de entrenamiento transformados
+        y_train: Etiquetas de entrenamiento
+        search_space: Espacio de búsqueda de hiperparámetros
+        cv: Número de folds para validación cruzada
+        n_iter: Número de iteraciones para búsqueda aleatoria
+        random_state: Semilla para reproducibilidad
+        
+    Returns:
+        fitted_estimator: Mejor modelo encontrado
+    """
+    print("🔄 Entrenando Regresión Logística...")
+    
+    # Configuración por defecto si no se proporciona espacio de búsqueda
+    if search_space is None:
+        search_space = {
+            'C': [0.01, 0.1, 1, 10, 100],
+            'penalty': ['l1', 'l2', 'elasticnet'],
+            'solver': ['liblinear', 'lbfgs', 'saga'],
+            'max_iter': [100, 200, 500, 1000],
+            'class_weight': [None, 'balanced']
+        }
+    
+    # Crear modelo base
+    base_model = LogisticRegression(random_state=random_state)
+    
+    # Configurar búsqueda aleatoria
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=search_space,
+        n_iter=n_iter,
+        cv=cv,
+        scoring='accuracy',
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=0
+    )
+    
+    # Entrenar modelo
+    random_search.fit(X_train_t, y_train)
+    
+    # Obtener mejor modelo
+    best_model = random_search.best_estimator_
+    
+    print(f"✅ Regresión Logística entrenada")
+    print(f"   • Mejores parámetros: {random_search.best_params_}")
+    print(f"   • Mejor score CV: {random_search.best_score_:.4f}")
+    
+    return best_model
+
+
+def train_svm_classifier(X_train_t, y_train, search_space=None, cv=5, n_iter=50, random_state=42):
+    """
+    Entrena un modelo SVM para clasificación con búsqueda de hiperparámetros
+    
+    Args:
+        X_train_t: Datos de entrenamiento transformados
+        y_train: Etiquetas de entrenamiento
+        search_space: Espacio de búsqueda de hiperparámetros
+        cv: Número de folds para validación cruzada
+        n_iter: Número de iteraciones para búsqueda aleatoria
+        random_state: Semilla para reproducibilidad
+        
+    Returns:
+        fitted_estimator: Mejor modelo encontrado
+    """
+    print("🔄 Entrenando SVM Clasificador...")
+    
+    # Configuración por defecto si no se proporciona espacio de búsqueda
+    if search_space is None:
+        search_space = {
+            'C': [0.1, 1, 10, 100],
+            'gamma': ['scale', 'auto', 0.001, 0.01, 0.1, 1],
+            'kernel': ['rbf', 'linear', 'poly']
+        }
+    
+    # Crear modelo base
+    base_model = SVC(random_state=random_state, probability=True)
+    
+    # Configurar búsqueda aleatoria
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=search_space,
+        n_iter=n_iter,
+        cv=cv,
+        scoring='accuracy',
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=0
+    )
+    
+    # Entrenar modelo
+    random_search.fit(X_train_t, y_train)
+    
+    # Obtener mejor modelo
+    best_model = random_search.best_estimator_
+    
+    print(f"✅ SVM Clasificador entrenado")
+    print(f"   • Mejores parámetros: {random_search.best_params_}")
+    print(f"   • Mejor score CV: {random_search.best_score_:.4f}")
+    
+    return best_model
+
+
+def train_decision_tree_classifier(X_train_t, y_train, search_space=None, cv=5, n_iter=50, random_state=42):
+    """
+    Entrena un modelo de Árbol de Decisión para clasificación con búsqueda de hiperparámetros
+    
+    Args:
+        X_train_t: Datos de entrenamiento transformados
+        y_train: Etiquetas de entrenamiento
+        search_space: Espacio de búsqueda de hiperparámetros
+        cv: Número de folds para validación cruzada
+        n_iter: Número de iteraciones para búsqueda aleatoria
+        random_state: Semilla para reproducibilidad
+        
+    Returns:
+        fitted_estimator: Mejor modelo encontrado
+    """
+    print("🔄 Entrenando Árbol de Decisión Clasificador...")
+    
+    # Configuración por defecto si no se proporciona espacio de búsqueda
+    if search_space is None:
+        search_space = {
+            'max_depth': [3, 5, 10, 15, 20, None],
+            'min_samples_split': [2, 5, 10, 20],
+            'min_samples_leaf': [1, 2, 4, 8],
+            'criterion': ['gini', 'entropy']
+        }
+    
+    # Crear modelo base
+    base_model = DecisionTreeClassifier(random_state=random_state)
+    
+    # Configurar búsqueda aleatoria
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=search_space,
+        n_iter=n_iter,
+        cv=cv,
+        scoring='accuracy',
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=0
+    )
+    
+    # Entrenar modelo
+    random_search.fit(X_train_t, y_train)
+    
+    # Obtener mejor modelo
+    best_model = random_search.best_estimator_
+    
+    print(f"✅ Árbol de Decisión Clasificador entrenado")
+    print(f"   • Mejores parámetros: {random_search.best_params_}")
+    print(f"   • Mejor score CV: {random_search.best_score_:.4f}")
+    
+    return best_model
+
+
+def train_random_forest_classifier(X_train_t, y_train, search_space=None, cv=5, n_iter=50, random_state=42):
+    """
+    Entrena un modelo Random Forest para clasificación con búsqueda de hiperparámetros
+    
+    Args:
+        X_train_t: Datos de entrenamiento transformados
+        y_train: Etiquetas de entrenamiento
+        search_space: Espacio de búsqueda de hiperparámetros
+        cv: Número de folds para validación cruzada
+        n_iter: Número de iteraciones para búsqueda aleatoria
+        random_state: Semilla para reproducibilidad
+        
+    Returns:
+        fitted_estimator: Mejor modelo encontrado
+    """
+    print("🔄 Entrenando Random Forest Clasificador...")
+    
+    # Configuración por defecto si no se proporciona espacio de búsqueda
+    if search_space is None:
+        search_space = {
+            'n_estimators': [50, 100, 200, 300],
+            'max_depth': [3, 5, 10, 15, None],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'criterion': ['gini', 'entropy']
+        }
+    
+    # Crear modelo base
+    base_model = RandomForestClassifier(random_state=random_state)
+    
+    # Configurar búsqueda aleatoria
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=search_space,
+        n_iter=n_iter,
+        cv=cv,
+        scoring='accuracy',
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=0
+    )
+    
+    # Entrenar modelo
+    random_search.fit(X_train_t, y_train)
+    
+    # Obtener mejor modelo
+    best_model = random_search.best_estimator_
+    
+    print(f"✅ Random Forest Clasificador entrenado")
+    print(f"   • Mejores parámetros: {random_search.best_params_}")
+    print(f"   • Mejor score CV: {random_search.best_score_:.4f}")
+    
+    return best_model
+
+
+def train_mlp_classifier(X_train_t, y_train, search_space=None, cv=5, n_iter=50, random_state=42):
+    """
+    Entrena un modelo MLP para clasificación con búsqueda de hiperparámetros
+    
+    Args:
+        X_train_t: Datos de entrenamiento transformados
+        y_train: Etiquetas de entrenamiento
+        search_space: Espacio de búsqueda de hiperparámetros
+        cv: Número de folds para validación cruzada
+        n_iter: Número de iteraciones para búsqueda aleatoria
+        random_state: Semilla para reproducibilidad
+        
+    Returns:
+        fitted_estimator: Mejor modelo encontrado
+    """
+    print("🔄 Entrenando Red Neuronal Clasificador...")
+    
+    # Configuración por defecto si no se proporciona espacio de búsqueda
+    if search_space is None:
+        search_space = {
+            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50)],
+            'activation': ['relu', 'tanh'],
+            'solver': ['adam', 'lbfgs'],
+            'alpha': [0.0001, 0.001, 0.01],
+            'max_iter': [200, 500, 1000]
+        }
+    
+    # Crear modelo base
+    base_model = MLPClassifier(random_state=random_state)
+    
+    # Configurar búsqueda aleatoria
+    random_search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=search_space,
+        n_iter=n_iter,
+        cv=cv,
+        scoring='accuracy',
+        random_state=random_state,
+        n_jobs=-1,
+        verbose=0
+    )
+    
+    # Entrenar modelo
+    random_search.fit(X_train_t, y_train)
+    
+    # Obtener mejor modelo
+    best_model = random_search.best_estimator_
+    
+    print(f"✅ Red Neuronal Clasificador entrenada")
+    print(f"   • Mejores parámetros: {random_search.best_params_}")
+    print(f"   • Mejor score CV: {random_search.best_score_:.4f}")
+    
+    return best_model
+
+
+def evaluate_classification_model(model, X_test, y_test, model_name="Modelo"):
+    """
+    Evalúa un modelo de clasificación
+    
+    Args:
+        model: Modelo entrenado
+        X_test: Datos de prueba
+        y_test: Etiquetas de prueba
+        model_name: Nombre del modelo para reportes
+        
+    Returns:
+        dict: Diccionario con métricas de evaluación
+    """
+    # Realizar predicciones
+    y_pred = model.predict(X_test)
+    
+    # Calcular métricas
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, average='weighted')
+    recall = recall_score(y_test, y_pred, average='weighted')
+    f1 = f1_score(y_test, y_pred, average='weighted')
+    
+    # Crear diccionario de métricas
+    metrics = {
+        'Modelo': model_name,
+        'Accuracy': round(accuracy, 4),
+        'Precision': round(precision, 4),
+        'Recall': round(recall, 4),
+        'F1-Score': round(f1, 4)
+    }
+    
+    print(f"\n📊 Evaluación de {model_name}:")
+    print(f"   • Accuracy: {accuracy:.4f}")
+    print(f"   • Precision: {precision:.4f}")
+    print(f"   • Recall: {recall:.4f}")
+    print(f"   • F1-Score: {f1:.4f}")
+    
+    return metrics, y_pred
